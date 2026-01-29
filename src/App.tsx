@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useRef } from "react";
 import { useGSAP } from "@gsap/react";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/dist/ScrollTrigger";
@@ -11,7 +11,6 @@ import { ScrollSmoother } from "gsap/dist/ScrollSmoother";
 import * as motion from "motion/react-client";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import {
   InputGroup,
   InputGroupAddon,
@@ -75,7 +74,7 @@ export default function Home() {
         ".shape-overlays__path",
       );
 
-      if (!overlay || !paths || paths.length === 0) return;
+      if (!overlay || !paths) return;
 
       const numPoints = 10;
       const numPaths = paths.length;
@@ -126,19 +125,21 @@ export default function Home() {
 
       function render() {
         for (let i = 0; i < numPaths; i++) {
-          const path = paths[i];
-          const points = allPoints[i];
+          if (paths) {
+            const path = paths[i];
+            const points = allPoints[i];
 
-          let d = isOpened ? `M 0 0 V ${points[0]} C` : `M 0 ${points[0]} C`;
+            let d = isOpened ? `M 0 0 V ${points[0]} C` : `M 0 ${points[0]} C`;
 
-          for (let j = 0; j < numPoints - 1; j++) {
-            const p = ((j + 1) / (numPoints - 1)) * 100;
-            const cp = p - 100 / (numPoints - 1) / 2;
-            d += ` ${cp} ${points[j]} ${cp} ${points[j + 1]} ${p} ${points[j + 1]}`;
+            for (let j = 0; j < numPoints - 1; j++) {
+              const p = ((j + 1) / (numPoints - 1)) * 100;
+              const cp = p - 100 / (numPoints - 1) / 2;
+              d += ` ${cp} ${points[j]} ${cp} ${points[j + 1]} ${p} ${points[j + 1]}`;
+            }
+
+            d += isOpened ? ` V 100 H 0` : ` V 0 H 0`;
+            path.setAttribute("d", d);
           }
-
-          d += isOpened ? ` V 100 H 0` : ` V 0 H 0`;
-          path.setAttribute("d", d);
         }
       }
 
@@ -290,76 +291,85 @@ export default function Home() {
   // 2. Optimized Infinite Pinning Logic
   useGSAP(
     () => {
-const panels = gsap.utils.toArray<HTMLElement>(".panel");
-    if (panels.length === 0) return;
+      const panels = gsap.utils.toArray<HTMLElement>(".panel");
+      if (panels.length === 0) return;
 
-    panels.forEach((panel: any, i: number) => {
-      gsap.set(panel, { zIndex: i });
+      panels.forEach((panel: any, i: number) => {
+        gsap.set(panel, { zIndex: i });
 
-      const strip = panel.querySelector(".gallery-strip") as HTMLElement;
-      const isGallery = !!strip;
+        const strip = panel.querySelector(".gallery-strip") as HTMLElement;
+        const isGallery = !!strip;
+
+        ScrollTrigger.create({
+          trigger: panel,
+          start: "top top",
+          pin: true,
+          pinSpacing: isGallery,
+          end: isGallery ? "+=6000" : "+=100%",
+          id: `panel-${i}`,
+          invalidateOnRefresh: true,
+        });
+
+        // Gallery horizontal scroll logic remains the same
+        if (isGallery) {
+          gsap.to(strip, {
+            x: () => {
+              const scrollAmount = strip.scrollWidth - window.innerWidth;
+              // We return the negative value.
+              // If scrollAmount is 2000, we move -2200px.
+              return -(scrollAmount + 200);
+            },
+            ease: "none",
+            scrollTrigger: {
+              trigger: panel,
+              start: "top top",
+              end: "+=6000",
+              scrub: 1,
+              invalidateOnRefresh: true,
+            },
+          });
+        }
+      });
 
       ScrollTrigger.create({
-        trigger: panel,
-        start: "top top",
-        pin: true,
-        pinSpacing: isGallery, 
-        end: isGallery ? "+=4000" : "+=100%",
-        id: `panel-${i}`,
-        invalidateOnRefresh: true,
-      });
+        snap: {
+          snapTo: (value: number) => {
+            // 1. Get the current scroll position in pixels
+            const scrollPos = value * ScrollTrigger.maxScroll(window);
 
-      // Gallery horizontal scroll logic remains the same
-      if (isGallery) {
-        const scrollAmount = strip.scrollWidth - window.innerWidth;
-        gsap.to(strip, {
-          x: -scrollAmount - 200,
-          ease: "none",
-          scrollTrigger: {
-            trigger: panel,
-            start: "top top",
-            end: "+=4000",
-            scrub: 1,
+            // 2. Identify your Gallery (Portfolio) section
+            const stGallery = ScrollTrigger.getById("panel-2");
+
+            // 3. DISABLE snapping if inside the horizontal gallery
+            // This keeps the section "still" and lets the user scroll freely
+            if (
+              stGallery &&
+              scrollPos > stGallery.start &&
+              scrollPos < stGallery.end
+            ) {
+              return value;
+            }
+
+            // 4. Snap to the nearest panel start for all other sections
+            const panels = gsap.utils.toArray<HTMLElement>(".panel");
+            const panelStarts = panels.map((_, i) => {
+              const st = ScrollTrigger.getById(`panel-${i}`);
+              return st ? st.start / ScrollTrigger.maxScroll(window) : 0;
+            });
+
+            return gsap.utils.snap(panelStarts, value);
           },
-        });
-      }
-    });
-
-    ScrollTrigger.create({
-  snap: {
-    snapTo: (value: number) => {
-      // 1. Get the current scroll position in pixels
-      const scrollPos = value * ScrollTrigger.maxScroll(window);
-      
-      // 2. Identify your Gallery (Portfolio) section
-      const stGallery = ScrollTrigger.getById("panel-2"); 
-
-      // 3. DISABLE snapping if inside the horizontal gallery
-      // This keeps the section "still" and lets the user scroll freely
-      if (stGallery && scrollPos > stGallery.start && scrollPos < stGallery.end) {
-        return value; 
-      }
-
-      // 4. Snap to the nearest panel start for all other sections
-      const panels = gsap.utils.toArray<HTMLElement>(".panel");
-      const panelStarts = panels.map((_, i) => {
-        const st = ScrollTrigger.getById(`panel-${i}`);
-        return st ? st.start / ScrollTrigger.maxScroll(window) : 0;
+          duration: { min: 0.2, max: 0.6 }, // Slightly longer duration for a smoother transition
+          delay: 0.2, // Increased delay so it doesn't snap while the user is still moving
+          ease: "power3.inOut", // A more "premium," weighted feel
+        },
       });
 
-      return gsap.utils.snap(panelStarts, value);
-    },
-    duration: { min: 0.2, max: 0.6 }, // Slightly longer duration for a smoother transition
-    delay: 0.2,                      // Increased delay so it doesn't snap while the user is still moving
-    ease: "power3.inOut",            // A more "premium," weighted feel
-  },
-});
+      // We removed handleScroll and the 'scroll' EventListener here.
 
-    // We removed handleScroll and the 'scroll' EventListener here.
-    
-    window.addEventListener("resize", () => {
-      ScrollTrigger.refresh();
-    });
+      window.addEventListener("resize", () => {
+        ScrollTrigger.refresh();
+      });
     },
     { scope: containerRef },
   );
@@ -419,7 +429,7 @@ const panels = gsap.utils.toArray<HTMLElement>(".panel");
     language: string;
   }) => (
     <Card className="cursor-pointer h-[85px] lg:h-[200px] w-full md:w-[300px] animate-fade-in transition-all duration-500 hover:scale-105 hover:shadow-lg relative overflow-hidden pt-[32px]">
-      <CardHeader className="absolute z-10 bottom-4 flex-col items-start">
+      <CardHeader className="absolute z-10 bottom-4 flex-col items-start w-full">
         <h4 className="text-white font-bold text-2xl w-full ">{language}</h4>
         <p className="text-sm text-white/60 font-normal">{level}</p>
       </CardHeader>
@@ -529,9 +539,7 @@ const panels = gsap.utils.toArray<HTMLElement>(".panel");
       <section className="flex flex-col gap-8 md:gap-32 panel h-screen bg-gradient-to-tr from-[#ECE5F0] via-[#F5F3F7] to-white flex items-center justify-center text-black text-3xl font-bold">
         <div className="flex flex-col items-center justify-center">
           <p className="text-3xl">Portfolio</p>
-          <p className="text-sm opacity-70">
-            The Creative & Visionary
-          </p>
+          <p className="text-sm opacity-70">The Creative & Visionary</p>
         </div>
         <div className="overflow-hidden relative">
           <div className="w-full p-0 ml-auto mr-auto gallery-wrapper">
